@@ -49,6 +49,8 @@ from app_config.config_countries import ConfCountries as cfgcountries
 from app_config.config_service import ConfService as cfgservice
 from app_config.config_secrets import revocation_api_key
 
+from dilithium_py.ml_dsa import ML_DSA_44
+import re
 
 def mdocFormatter(data, credential_metadata, country, device_publickey):
     """Construct and sign the mdoc with the country private key
@@ -267,32 +269,24 @@ def sdjwtFormatter(PID, country):
     """
 
     hash_object = hashlib.sha256()
-
     seed = int(hash_object.hexdigest(), 16)
     #doctype = PID["credential_metadata"]["issuer_config"]["doctype"]
-
     
     PID_Claims_data = PID["data"]["claims"]
     iat = DatestringFormatter(PID_Claims_data["issuance_date"])
     PID_Claims_data.pop("issuance_date")
-
     exp = DatestringFormatter(PID_Claims_data["expiry_date"])
-
     validity = PID_Claims_data["expiry_date"]
-
     PID_Claims_data.pop("expiry_date")
-
     #jti = str(uuid4())
 
     pid_data = PID.get("data", {})
     device_key = PID["device_publickey"]
+    print("device_key: ", device_key)
 
     vct = PID["credential_metadata"]["vct"] #doctype2vct(doctype)
-
     doctype = vct2doctype(vct)
-
     revocation_json = None
-
     if revocation_api_key:
         payload = "doctype=" + doctype + "&country=" + country + "&expiry_date=" + validity
         headers = {
@@ -304,7 +298,6 @@ def sdjwtFormatter(PID, country):
 
         if response.status_code == 200:
             revocation_json = response.json()
-            
 
     claims = {
         "iss": cfgservice.service_url[:-1],
@@ -347,6 +340,11 @@ def sdjwtFormatter(PID, country):
         cfgcountries.supported_countries[country]["pid_mdoc_cert"], "rb"
     ) as certificate:
          certificate_data=certificate.read()
+
+    with open(
+        cfgcountries.supported_countries[country]["pid_sd_jwt_pqc"], "rb"
+    ) as certificate:
+         certificate_pqc_data=certificate.read()
     
     certificate_base64=base64.b64encode(certificate_data).decode("utf-8")
     x5c={
@@ -354,6 +352,11 @@ def sdjwtFormatter(PID, country):
     }
     x5c["x5c"].append(certificate_base64)
 
+    certificate_pqc_base64=base64.b64encode(certificate_pqc_data).decode("utf-8")
+    x5c_pqc={
+        "x5c":[]
+    }
+    x5c_pqc["x5c"].append(certificate_pqc_base64)
     with open(
         cfgcountries.supported_countries[country]["pid_mdoc_privkey"], "rb"
     ) as key_file:
@@ -370,55 +373,66 @@ def sdjwtFormatter(PID, country):
         private_key, "private"
     )
 
-    device_key_bytes = base64.urlsafe_b64decode(device_key.encode("utf-8"))
-    public_key = serialization.load_pem_public_key(device_key_bytes)
+    with open(
+        cfgcountries.supported_countries[country]["pid_sd_jwt_privkey_pqc"], "rb"
+    ) as key_file:
+        seed_pem = key_file.read()
 
-    (public_key_curve_identifier, public_key_x, public_key_y) = KeyData(
-        public_key, "public"
-    )
+    pem_str = seed_pem.decode("utf-8")
+    base64_seed = re.findall(r"-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----", pem_str, re.DOTALL)
+    
+    if base64_seed:
+        clean_base64_seed = base64_seed[0].strip().replace('\n', '')
 
-    jwk_kwargs = {
+    decode_seed = base64.b64decode(clean_base64_seed)
+    seed = decode_seed[22:]
+    pk, sk = ML_DSA_44.key_derive(seed)
+
+    print("------PUBLIC KEY DERIVED FROM SEED------")
+    print("Public Key: ", base64.b64encode(pk).decode("utf-8"))
+    print("----------------------------------------------------------------------------------------")
+
+    jwk_kwargs_test = {
         "issuer_key": {
-            "kty": "EC",
-            "d": jwt.utils.base64url_encode(
-                priv_d.to_bytes((priv_d.bit_length() + 7) // 8, "big")
-            ).decode("utf-8"),
-            "crv": private_key_curve_identifier,
-            "x": jwt.utils.base64url_encode(private_key_x).decode("utf-8"),
-            "y": jwt.utils.base64url_encode(private_key_y).decode("utf-8"),
-        },
+                "kid": "T4xl70S7MT6Zeq6r9V9fPJGVn76wfnXJ21-gyo0Gu6o",
+                "kty": "AKP",
+                "alg": "ML-DSA-44",
+                "pub": base64.b64encode(pk).decode("utf-8"),
+                "seed": base64.b64encode(seed).decode("utf-8"),
+            },
         "holder_key": {
-            "kty": "EC",
-            "crv": public_key_curve_identifier,
-            "x": jwt.utils.base64url_encode(public_key_x).decode("utf-8"),
-            "y": jwt.utils.base64url_encode(public_key_y).decode("utf-8"),
+            "kty": "AKP",
+            "alg": "ML-DSA-44",
+            "pub": device_key
         },
-        "key_size": 256,
-        "kty": "EC",
+        "key_size": 2560,
+        "kty": "AKP",
     }
+    
+    print("KEY TYPE: ", jwk_kwargs_test["issuer_key"]["kty"])
+    print("KEY ALGORITHM: ", jwk_kwargs_test["issuer_key"]["alg"])
+    print("PUBLIC KEY: ", jwk_kwargs_test["issuer_key"]["pub"])
 
-    keys = get_jwk(jwk_kwargs, True, seed)
+    keys_test = get_jwk(jwk_kwargs_test, True, seed)
+
+    print("claims: ", claims)
 
     ### Produce SD-JWT and SVC for selected example
     SDJWTIssuer.unsafe_randomness = False
     SDJWTIssuer.SD_JWT_HEADER="dc+sd-jwt"
+
     sdjwt_at_issuer = SDJWTIssuer(
         claims,
-        keys["issuer_key"],
-        keys["holder_key"],
+        keys_test["issuer_key"],
+        keys_test["holder_key"],
+        sign_alg="ML-DSA-44",
         add_decoy_claims=False,
-        extra_header_parameters=x5c
+        extra_header_parameters=x5c_pqc
     )
 
-    # sdjwt_at_holder = SDJWTHolder(sdjwt_at_issuer.sd_jwt_issuance)
-    # sdjwt_at_holder.create_presentation(
-    # example["holder_disclosed_claims"],
-    # settings["key_binding_nonce"] if example.get("key_binding", False) else None,
-    # settings["identifiers"]["verifier"] if example.get("key_binding", False) else None,
-    # demo_keys["holder_key"] if example.get("key_binding", False) else None,
-    # )
-
-    return sdjwt_at_issuer.sd_jwt_issuance
+    t = sdjwt_at_issuer.sd_jwt_issuance
+    print("sd_jwt_issuance: ", t)
+    return t
 
 
 def DATA_sd_jwt(PID):

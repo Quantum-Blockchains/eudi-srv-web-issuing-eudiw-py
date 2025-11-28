@@ -62,6 +62,8 @@ class ConfCountries:
             "pid_mdoc_privkey_passwd": None,  # None or bytes
             "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/PID-DS-0001_UT_cert.der",
             # "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/hackathon-DS-0001_UT_cert.der",
+            "pid_sd_jwt_pqc": "/etc/eudiw/pid-issuer/cert/server_ml_dsa_44.crt",
+            "pid_sd_jwt_privkey_pqc": "/etc/eudiw/pid-issuer/privKey/seed-only.pem",
             "un_distinguishing_sign": "FC",
             "supported_credentials": [
                 "eu.europa.ec.eudi.pid_mdoc",

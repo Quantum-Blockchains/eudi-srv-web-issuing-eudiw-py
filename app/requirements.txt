@@ -23,7 +23,7 @@ segno==1.6.1
 qrcode-artistic==3.0.2
 gunicorn
 git+https://github.com/eu-digital-identity-wallet/pyMDOC-CBOR.git
-git+https://github.com/eu-digital-identity-wallet/idpy-oidc.git
+git+https://github.com/eu-digital-identity-wallet/idpy-oidc.git@bad066ff7e0f7e2e00a19577f5dde5f7417fdcb7
 git+https://github.com/Quantum-Blockchains/openid4v.git
 git+https://github.com/Quantum-Blockchains/sd-jwt-python.git@dilithium
 git+https://github.com/rohe/fedservice.git@a4bef2e3f230f4b07c6ef45e4c8be55778d0561e

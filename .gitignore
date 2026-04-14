@@ -11,6 +11,10 @@ nohup.out
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 
+api_docs/test_tokens/DS-token/PID-DS-0002-decrypted.key.pem
+api_docs/test_tokens/DS-token/PID-DS-0002.cert.der
+api_docs/test_tokens/DS-token/PID-DS-0002.pid-ds-0002.key.pem
+security/
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/

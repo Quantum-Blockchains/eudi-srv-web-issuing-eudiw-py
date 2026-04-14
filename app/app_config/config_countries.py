@@ -76,6 +76,137 @@ class ConfCountries:
     formCountry = "FC"
     # supported countries
     supported_countries = {
+        # "QB": {
+        #     "name": "QB Keycloak",
+        #     # "pid_mdoc_privkey": "/etc/eudiw/pid-issuer/privKey/PID-DS-0001_QB.pem",
+        #     # "pid_mdoc_privkey_passwd": None,
+        #     # "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/PID-DS-0001_QB_cert.der",
+        #     "pid_mdoc_privkey": "/etc/eudiw/pid-issuer/privKey/PID-DS-0002-decrypted.key.pem",
+        #     "pid_mdoc_privkey_passwd": None,  # None or bytes
+        #     "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/PID-DS-0002.cert.der",
+        #     "pid_sd_jwt_pqc": "/etc/eudiw/pid-issuer/cert/server_ml_dsa_44.crt",
+        #     "pid_sd_jwt_privkey_pqc": "/etc/eudiw/pid-issuer/privKey/seed-only.pem",
+        #     "supported_credentials": [
+        #         "eu.europa.ec.eudi.pid_mdoc",
+        #         "eu.europa.ec.eudi.pid_vc_sd_jwt",
+        #         "eu.europa.ec.eudi.mdl_mdoc",
+        #         "eu.europa.ec.eudi.over18_mdoc",
+        #         "eu.europa.ec.eudi.loyalty_mdoc",
+        #         "eu.europa.ec.eudi.pseudonym_over18_mdoc",
+        #         "eu.europa.ec.eudi.pseudonym_over18_mdoc_deferred_endpoint",
+        #         "eu.europa.ec.eudi.photoid",
+        #         "eu.europa.ec.eudi.por_mdoc",
+        #         "eu.europa.ec.eudi.iban_mdoc",
+        #         "eu.europa.ec.eudi.hiid_mdoc",
+        #         "eu.europa.ec.eudi.tax_mdoc",
+        #         "eu.europa.ec.eudi.msisdn_mdoc",
+        #         "eu.europa.ec.eudi.pda1_mdoc",
+        #         "eu.europa.ec.eudi.tax_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.por_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.msisdn_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.hiid_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.iban_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.pseudonym_over18_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.ehic_mdoc",
+        #         "eu.europa.ec.eudi.cor_mdoc",
+        #         "eu.europa.ec.eudi.ehic_sd_jwt_vc",
+        #         "eu.europa.ec.eudi.pda1_sd_jwt_vc"
+        #     ],
+        #     "connection_type": "openid",
+        #     "oidc_auth": {
+        #         "base_url": "https://login.qbck.io/realms/euidw%20realm",
+        #         "redirect_uri": cfgserv.service_url + "dynamic/redirect",
+        #         "scope": "openid profile email",
+        #         "response_type": "code",
+        #         "client_id": "eudiw-issuer-dev",
+        #     },
+        #     "oauth_auth": {
+        #         "base_url": "https://login.qbck.io/realms/euidw%20realm",
+        #         "redirect_uri": cfgserv.service_url + "dynamic/redirect",
+        #         "client_id": "eudiw-issuer-dev",
+        #         "client_secret": "plGKZtatNWGZ07iczZLrd7AQABWi8cyf",
+        #     },
+        #     "attribute_request": {
+        #         "header": {},
+        #         "custom_modifiers": {
+        #             "birth_date": "birthdate",
+        #             "nationalities": "nationalities"
+        #         },
+
+        #     },
+        #     "oidc_redirect": {
+        #         "headers": {
+        #             "Content-Type": "application/x-www-form-urlencoded",
+        #             "Authorization": "Basic ZXVkaXctaXNzdWVyLWRldjpwbEdLWnRhdE5XR1owN2ljelpMcmQ3QVFBQldpOGN5Zg==",
+        #         },
+        #         "grant_type": "authorization_code",
+        #         "redirect_uri": cfgserv.service_url + "dynamic/redirect",
+        #     },
+        # },
+        "QB": {
+            "name": "QB Keycloak",
+            "pid_mdoc_privkey": "/etc/eudiw/pid-issuer/privKey/PID-DS-0002-decrypted.key.pem",
+            "pid_mdoc_privkey_passwd": None,
+            "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/PID-DS-0002.cert.der",
+            "pid_sd_jwt_pqc": "/etc/eudiw/pid-issuer/cert/server_ml_dsa_44.crt",
+            "pid_sd_jwt_privkey_pqc": "/etc/eudiw/pid-issuer/privKey/seed-only.pem",
+            "supported_credentials": [
+                "eu.europa.ec.eudi.pid_mdoc",
+                "eu.europa.ec.eudi.pid_vc_sd_jwt",
+                "eu.europa.ec.eudi.mdl_mdoc",
+                "eu.europa.ec.eudi.over18_mdoc",
+                "eu.europa.ec.eudi.loyalty_mdoc",
+                "eu.europa.ec.eudi.pseudonym_over18_mdoc",
+                "eu.europa.ec.eudi.pseudonym_over18_mdoc_deferred_endpoint",
+                "eu.europa.ec.eudi.photoid",
+                "eu.europa.ec.eudi.por_mdoc",
+                "eu.europa.ec.eudi.iban_mdoc",
+                "eu.europa.ec.eudi.hiid_mdoc",
+                "eu.europa.ec.eudi.tax_mdoc",
+                "eu.europa.ec.eudi.msisdn_mdoc",
+                "eu.europa.ec.eudi.pda1_mdoc",
+                "eu.europa.ec.eudi.tax_sd_jwt_vc",
+                "eu.europa.ec.eudi.por_sd_jwt_vc",
+                "eu.europa.ec.eudi.msisdn_sd_jwt_vc",
+                "eu.europa.ec.eudi.hiid_sd_jwt_vc",
+                "eu.europa.ec.eudi.iban_sd_jwt_vc",
+                "eu.europa.ec.eudi.pseudonym_over18_sd_jwt_vc",
+                "eu.europa.ec.eudi.ehic_mdoc",
+                "eu.europa.ec.eudi.cor_mdoc",
+                "eu.europa.ec.eudi.ehic_sd_jwt_vc",
+                "eu.europa.ec.eudi.pda1_sd_jwt_vc",
+            ],
+            "connection_type": "openid",
+            "oidc_auth": {
+                "base_url": "https://login.qbck.io/realms/euidw%20realm",
+                "redirect_uri": cfgserv.service_url + "dynamic/redirect",
+                "scope": "openid profile email",
+                "response_type": "code",
+                "client_id": "eudiw-issuer-dev",
+            },
+            "oauth_auth": {
+                "base_url": "https://login.qbck.io/realms/euidw%20realm",
+                "redirect_uri": cfgserv.service_url + "dynamic/redirect",
+                "scope": "openid profile email",
+                "response_type": "code",
+                "client_id": "eudiw-issuer-dev",
+                "client_secret": "plGKZtatNWGZ07iczZLrd7AQABWi8cyf",
+            },
+            "attribute_request": {
+                "header": {},
+                "custom_modifiers": {
+                    "birth_date": "birthdate",
+                    "nationalities": "nationalities",
+                },
+            },
+            "oidc_redirect": {
+                "headers": {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                "grant_type": "authorization_code",
+                "redirect_uri": cfgserv.service_url + "dynamic/redirect",
+            },
+        },
         "EU": {
             "name": "nodeEU",
             "pid_url_oidc": cfgserv.service_url + "eidasnode/lightrequest?country=EU",
@@ -108,11 +239,17 @@ class ConfCountries:
         formCountry: {
             "name": "FormEU",
             "pid_url": cfgserv.service_url + "pid/form",
-            "pid_mdoc_privkey": cfgserv.privKey_path + "PID-DS-0001_UT.pem",
+            # "pid_mdoc_privkey": cfgserv.privKey_path + "PID-DS-0001_UT.pem",
+            # "pid_mdoc_privkey": cfgserv.privKey_path + "PID-DS-0002-decrypted.key.pem",
+            "pid_mdoc_privkey": "/etc/eudiw/pid-issuer/privKey/PID-DS-0002-decrypted.key.pem",
             # "pid_mdoc_privkey": cfgserv.privKey_path + "hackathon-DS-0001_UT.pem",
             # "pid_mdoc_privkey": 'app\certs\PID-DS-0001_UT.pem',
             "pid_mdoc_privkey_passwd": None,  # None or bytes
-            "pid_mdoc_cert": cfgserv.trusted_CAs_path + "PID-DS-0001_UT_cert.der",
+            # "pid_mdoc_cert": cfgserv.trusted_CAs_path + "PID-DS-0001_UT_cert.der",
+            # "pid_mdoc_cert": cfgserv.trusted_CAs_path + "PID-DS-0002.cert.der",
+            "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/PID-DS-0002.cert.der",
+            "pid_sd_jwt_pqc": "/etc/eudiw/pid-issuer/cert/server_ml_dsa_44.crt",
+            "pid_sd_jwt_privkey_pqc": "/etc/eudiw/pid-issuer/privKey/seed-only.pem",
             # "pid_mdoc_cert": cfgserv.trusted_CAs_path + "hackathon-DS-0001_UT_cert.der",
             "un_distinguishing_sign": "FC",
             "supported_credentials": [
@@ -292,12 +429,50 @@ class ConfCountries:
                 "client_secret": eidas_node_client_secret,
             },
         },
+        "AV": {
+            "name": "Trusted Issuer",
+            "pid_mdoc_privkey": "/etc/eudiw/age_verification/privKey/AgeVerificationDS-001.pem",
+            "pid_mdoc_privkey_passwd": None,  # None or bytes
+            "pid_mdoc_cert": "/etc/eudiw/age_verification/cert/AgeVerificationDS-001_cert.der",
+            "un_distinguishing_sign": "AV",
+            "supported_credentials": [
+                "eu.europa.ec.eudi.age_verification_mdoc",
+                "eu.europa.ec.eudi.age_verification_mdoc_passport"
+            ],
+            "dynamic_R2": cfgserv.service_url + "dynamic/form_R2",
+        },
+        "AV2": {
+            "name": "Non-Trusted Issuer",
+            "pid_mdoc_privkey": "/etc/eudiw/age_verification/privKey/bak/AgeVerificationDS-001.pem",
+            "pid_mdoc_privkey_passwd": None,  # None or bytes
+            "pid_mdoc_cert": "/etc/eudiw/age_verification/cert/bak/AgeVerificationDS-001_cert.der",
+            "un_distinguishing_sign": "AV",
+            "supported_credentials": [
+                "eu.europa.ec.eudi.age_verification_mdoc",
+                "eu.europa.ec.eudi.pid_mdoc"
+            ],
+            "dynamic_R2": cfgserv.service_url + "dynamic/form_R2",
+        },
+        "LEI": {
+            "name": "LEI Lookup",
+            "pid_mdoc_privkey": "/etc/eudiw/pid-issuer/privKey/PID-DS-0002-decrypted.key.pem",
+            "pid_mdoc_privkey_passwd": None,  # None or bytes
+            "pid_mdoc_cert": "/etc/eudiw/pid-issuer/cert/PID-DS-0002.cert.der",
+            "pid_sd_jwt_pqc": "/etc/eudiw/pid-issuer/cert/server_ml_dsa_44.crt",
+            "pid_sd_jwt_privkey_pqc": "/etc/eudiw/pid-issuer/privKey/seed-only.pem",
+            "supported_credentials": [
+                "eu.europa.ec.eudi.lesi_legal_entity_sd_jwt_vc",
+            ],
+        },
     }
 
 
 class ConfFrontend:
     registered_frontends = {
         cfgserv.default_frontend: {
-            "url": os.getenv("DEFAULT_FRONTEND_URL", "https://ec.dev.issuer.eudiw.dev")
-        }
+            "url": os.getenv("DEFAULT_FRONTEND_URL", "https://eudi-issuer-frontend.duckdns.org")
+        },
+        "6d725b3c-6d42-448e-8bfd-1eff1fcf152d": {
+            "url": "https://age-verification.issuer.eudiw.dev"
+        },
     }

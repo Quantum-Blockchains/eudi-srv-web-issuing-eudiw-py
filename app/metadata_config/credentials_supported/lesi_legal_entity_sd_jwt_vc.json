@@ -1,0 +1,124 @@
+{
+  "eu.europa.ec.eudi.lesi_legal_entity_sd_jwt_vc":{
+     "format":"dc+sd-jwt",
+     "scope":"eu.europa.ec.eudi.lesi_legal_entity_sd_jwt_vc",
+     "cryptographic_binding_methods_supported":[
+        "jwk",
+        "cose_key"
+     ],
+     "credential_signing_alg_values_supported":[
+        "ES256"
+     ],
+     "proof_types_supported":{
+        "jwt":{
+           "proof_signing_alg_values_supported":[
+              "ES256"
+           ]
+        },
+        "cwt":{
+           "proof_signing_alg_values_supported":[
+              "ES256"
+           ],
+           "proof_alg_values_supported":[
+              -7
+           ],
+           "proof_crv_values_supported":[
+              1
+           ]
+        }
+     },
+     "vct":"urn:eu.europa.ec.eudi:lei_legal_entity:1",
+     "credential_metadata": {
+     "display":[
+        {
+           "name":"LEI Legal Entity (SD-JWT VC)",
+           "locale":"en",
+           "logo":{
+              "uri":"https://examplestate.com/public/pid.png",
+              "alt_text":"A square figure of a PID"
+           }
+        }
+     ],
+     "claims":[
+        {
+           "path":[
+              "lei"
+           ],
+           "mandatory":true,
+           "value_type":"string",
+           "source":"user",
+           "display":[
+              {
+                 "name":"LEI",
+                 "locale":"en"
+              }
+           ]
+        },
+        {
+           "path":[
+              "legal_name"
+           ],
+           "mandatory":true,
+           "value_type":"string",
+           "source":"user",
+           "display":[
+              {
+                 "name":"Legal Name",
+                 "locale":"en"
+              }
+           ]
+        },
+        {
+           "path":[
+              "legal_jurisdiction"
+           ],
+           "mandatory":true,
+           "value_type":"string",
+           "source":"user",
+           "display":[
+              {
+                 "name":"Legal Jurisdiction",
+                 "locale":"en"
+              }
+           ]
+        },
+        {
+           "path":[
+              "legal_form"
+           ],
+           "mandatory":true,
+           "value_type":"string",
+           "source":"user",
+           "display":[
+              {
+                 "name":"Legal Form",
+                 "locale":"en"
+              }
+           ]
+        },
+        {
+           "path":[
+              "registration_status"
+           ],
+           "mandatory":true,
+           "value_type":"string",
+           "source":"user",
+           "display":[
+              {
+                 "name":"Registration Status",
+                 "locale":"en"
+              }
+           ]
+        }
+     ]
+   },
+     "issuer_config":{
+        "issuing_authority":"Test PID issuer",
+        "organization_id":"EUDI Wallet Reference Implementation",
+        "validity":90,
+        "organization_name":"Test PID issuer",
+        "doctype":"eu.europa.ec.eudi.lei_legal_entity.1",
+        "credential_type": "LESI Legal Entity"
+     }
+  }
+}

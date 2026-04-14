@@ -1,14 +1,23 @@
 services:
-  issuer_backend:
-    image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-issuing-eudiw-py:main
+  eudi-issuer:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "6000:6000"
+    environment:
+      SERVICE_URL: https://eudiw-issuer.duckdns.org:5000/
+      EIDAS_NODE_URL: https://your.eidas.node.url/
+      DYNAMIC_PRESENTATION_URL: https://your.dynamic.presentation.url/
     volumes:
-      - /etc/eudiw/pid-issuer-dev/cert/:/etc/eudiw/pid-issuer-dev/cert/:ro
-      - /etc/eudiw/pid-issuer-dev/privKey/:/etc/eudiw/pid-issuer-dev/privKey/:ro
+      # - /etc/eudiw/pid-issuer-dev/cert/:/etc/eudiw/pid-issuer-dev/cert/:ro
+      # - /etc/eudiw/pid-issuer-dev/privKey/:/etc/eudiw/pid-issuer-dev/privKey/:ro
       - /tmp/log_dev:/tmp/log_dev
+      - ./security/config_secrets:/root/secrets
+      - ./security/pid-issuer:/etc/eudiw/pid-issuer
     env_file:
       - app/.env
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "eudiw-issuer.duckdns.org:host-gateway"
+    network_mode: host
     restart: unless-stopped

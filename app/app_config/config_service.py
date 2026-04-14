@@ -28,6 +28,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 import sys
+from email.utils import formataddr
 
 
 class ConfService:
@@ -57,9 +58,23 @@ class ConfService:
 
     privKey_path = os.getenv("PRIVKEY_PATH", "/etc/eudiw/pid-issuer/privKey/")
 
+    lei_api_base_url = "https://lei.info"
+
+    otp_email_host = os.getenv("OTP_EMAIL_HOST", "")
+    otp_email_port = int(os.getenv("OTP_EMAIL_PORT", "587"))
+    otp_email_use_tls = os.getenv("OTP_EMAIL_USE_TLS", "true").lower() == "true"
+    otp_email_username = os.getenv("OTP_EMAIL_USERNAME", "")
+    otp_email_password = os.getenv("OTP_EMAIL_PASSWORD", "")
+    otp_email_from_address = os.getenv("OTP_EMAIL_FROM_ADDRESS", "")
+    otp_email_from_name = os.getenv("OTP_EMAIL_FROM_NAME", "EUDI Issuer Demo")
+    otp_email_from = formataddr((otp_email_from_name, otp_email_from_address))
+
     # Nonce endpoint
+    # nonce_key = os.getenv(
+    #     "NONCE_KEY", "/etc/eudiw/pid-issuer-dev/privKey/nonce_rsa2048.pem"
+    # )
     nonce_key = os.getenv(
-        "NONCE_KEY", "/etc/eudiw/pid-issuer-dev/privKey/nonce_rsa2048.pem"
+        "NONCE_KEY", "/etc/eudiw/pid-issuer/privKey/nonce_rsa4096.pem"
     )
 
     # credential request key
@@ -164,6 +179,9 @@ class ConfService:
             "eu.europa.ec.eudi.employee_mdoc",
             "eu.europa.ec.eudi.pid_mdoc_deferred",
         ],
+        "lei_lookup": [
+            "eu.europa.ec.eudi.lesi_legal_entity_sd_jwt_vc",
+        ]
     }
 
     # ------------------------------------------------------------------------------------------------

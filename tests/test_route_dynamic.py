@@ -1142,6 +1142,19 @@ class TestAuthMethod:
         assert response.status_code == 302  # Redirect status code
         assert response.location == "https://service.test/dynamic/"
 
+    def test_link3_redirects_to_lei(self, client):
+        """Test selecting link3 redirects to LEI lookup endpoint"""
+        mock_session = MagicMock()
+        self.mock_get_session.return_value = mock_session
+
+        with client.session_transaction() as sess:
+            sess["session_id"] = "test_session"
+
+        response = client.post("/dynamic/auth_method", data={"optionsRadios": "link3"})
+
+        assert response.status_code == 302
+        assert response.location == "https://service.test/dynamic/lei"
+
     def test_get_request_returns_none(self, client):
         """Test GET request returns 500 due to missing return statement"""
         mock_session = MagicMock()
@@ -2063,6 +2076,7 @@ class TestRedirectWallet:
         """Test POST request successfully redirects with token and session_id"""
         test_session_id = "test_sess_456"
         test_user_id = "user_abc_789"
+        self.mock_session.country = "FC"
 
         # Set session_id in Flask session
         with client.session_transaction() as sess:
@@ -2088,6 +2102,121 @@ class TestRedirectWallet:
             "https://openid.provider.test/auth",
             {"token": self.mock_session.jws_token, "username": test_session_id},
         )
+
+    def test_lei_requires_matching_employee_email(self, client):
+        """Test LEI flow rejects non-matching employee email before redirecting."""
+        test_session_id = "test_sess_456"
+        self.mock_session.country = "LEI"
+        self.mock_session.frontend_id = "test_frontend"
+        self.mock_session.session_id = test_session_id
+        self.mock_session.user_data = {
+            "lei": "529900T8BM49AURSDO55",
+            "legal_name": "Acme Corporation",
+            "legal_jurisdiction": "PL",
+            "legal_form": "Limited",
+            "registration_status": "ACTIVE",
+            "issuing_country": "LEI",
+        }
+
+        with client.session_transaction() as sess:
+            sess["session_id"] = test_session_id
+
+        with patch(
+            "app.route_dynamic._get_target_frontend_url",
+            return_value="https://frontend.example.test",
+        ):
+            response = client.post(
+                "/dynamic/redirect_wallet",
+                data={
+                    "user_id": "user_abc_789",
+                    "employee_email": "person@gmail.com",
+                },
+            )
+
+        assert response.status_code == 200
+        assert b"Email domain must match the company name from the LEI record." in response.data
+        self.mock_url_get.assert_not_called()
+
+    def test_lei_send_generates_otp_and_rerenders_form(self, client):
+        """Test LEI send action generates OTP and shows verification step."""
+        test_session_id = "test_sess_456"
+        self.mock_session.country = "LEI"
+        self.mock_session.frontend_id = "test_frontend"
+        self.mock_session.session_id = test_session_id
+        self.mock_session.tx_code = None
+        self.mock_session.user_data = {
+            "lei": "529900T8BM49AURSDO55",
+            "legal_name": "Acme Corporation",
+            "legal_jurisdiction": "PL",
+            "legal_form": "Limited",
+            "registration_status": "ACTIVE",
+            "issuing_country": "LEI",
+        }
+
+        with client.session_transaction() as sess:
+            sess["session_id"] = test_session_id
+
+        with patch("app.route_dynamic.random.randint", return_value=123456), patch(
+            "app.route_dynamic._send_otp_email",
+            return_value=(True, ""),
+        ), patch(
+            "app.route_dynamic.session_manager.update_tx_code"
+        ) as mock_update_tx_code, patch(
+            "app.route_dynamic._get_target_frontend_url",
+            return_value="https://frontend.example.test",
+        ):
+            response = client.post(
+                "/dynamic/redirect_wallet",
+                data={
+                    "user_id": "user_abc_789",
+                    "employee_email": "person@acme.com",
+                    "send": "1",
+                },
+            )
+
+        assert response.status_code == 200
+        assert b"Verification code sent to your email." in response.data
+        mock_update_tx_code.assert_called_once_with(
+            session_id=test_session_id,
+            tx_code=123456,
+        )
+
+    def test_lei_authorize_requires_correct_otp(self, client):
+        """Test LEI authorize action blocks invalid OTP."""
+        test_session_id = "test_sess_456"
+        self.mock_session.country = "LEI"
+        self.mock_session.frontend_id = "test_frontend"
+        self.mock_session.session_id = test_session_id
+        self.mock_session.tx_code = 123456
+        self.mock_session.user_data = {
+            "lei": "529900T8BM49AURSDO55",
+            "legal_name": "Acme Corporation",
+            "legal_jurisdiction": "PL",
+            "legal_form": "Limited",
+            "registration_status": "ACTIVE",
+            "issuing_country": "LEI",
+        }
+
+        with client.session_transaction() as sess:
+            sess["session_id"] = test_session_id
+
+        with patch(
+            "app.route_dynamic._get_target_frontend_url",
+            return_value="https://frontend.example.test",
+        ):
+            response = client.post(
+                "/dynamic/redirect_wallet",
+                data={
+                    "user_id": "user_abc_789",
+                    "employee_email": "person@acme.com",
+                    "otp_code": "999999",
+                    "proceed": "1",
+                },
+            )
+
+        assert response.status_code == 200
+        assert b"Verification code is incorrect." in response.data
+        self.mock_url_get.assert_not_called()
 
     def test_get_method_fails(self, client):
         """Test GET request returns 405 Method Not Allowed"""

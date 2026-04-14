@@ -13,7 +13,7 @@
       "urn:ietf:params:oauth:grant-type:jwt-bearer",
       "refresh_token"
    ],
-   "jwks_uri":"https://dev.issuer.eudiw.dev/oidc/static/jwks.json",
+   "jwks_uri":"https://eudiw-issuer.duckdns.org:5000/static/jwks.json",
    "scopes_supported":[
       "openid"
    ],
@@ -92,12 +92,12 @@
    "code_challenge_methods_supported":[
       "S256"
    ],
-   "issuer":"https://dev.issuer.eudiw.dev/oidc",
-   "registration_endpoint":"https://dev.issuer.eudiw.dev/oidc/registration",
-   "introspection_endpoint":"https://dev.issuer.eudiw.dev/oidc/introspection",
-   "authorization_endpoint":"https://dev.issuer.eudiw.dev/oidc/authorization",
-   "token_endpoint":"https://dev.issuer.eudiw.dev/oidc/token",
-   "userinfo_endpoint":"https://dev.issuer.eudiw.dev/oidc/userinfo",
-   "end_session_endpoint":"https://dev.issuer.eudiw.dev/oidc/session",
-   "pushed_authorization_request_endpoint":"https://dev.issuer.eudiw.dev/oidc/pushed_authorization"
+   "issuer":"https://eudiw-issuer.duckdns.org:5000",
+   "registration_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/registration",
+   "introspection_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/introspection",
+   "authorization_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/authorization",
+   "token_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/token",
+   "userinfo_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/userinfo",
+   "end_session_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/session",
+   "pushed_authorization_request_endpoint":"https://eudiw-issuer.duckdns.org:5000/oidc/pushed_authorization"
 }

@@ -50,6 +50,8 @@ from app_config.config_service import ConfService as cfgservice
 
 from app import session_manager
 
+from dilithium_py.ml_dsa import ML_DSA_44
+import re
 
 def mdocFormatter(
     data: dict,
@@ -349,6 +351,26 @@ def sdjwtFormatter(PID, country):
     x5c["x5c"].append(certificate_base64)
 
     with open(
+        cfgcountries.supported_countries[country]["pid_sd_jwt_pqc"], "rb"
+    ) as certificate:
+         certificate_pqc_data=certificate.read()
+
+    certificate_pqc_base64=base64.b64encode(certificate_pqc_data).decode("utf-8")
+    x5c_pqc={
+        "x5c":[]
+    }
+    x5c_pqc["x5c"].append(certificate_pqc_base64)
+    with open(
+        cfgcountries.supported_countries[country]["pid_mdoc_privkey"], "rb"
+    ) as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=cfgcountries.supported_countries[country][
+                "pid_mdoc_privkey_passwd"
+            ],
+        )
+
+    with open(
         cfgcountries.supported_countries[country]["pid_mdoc_privkey"], "rb"
     ) as key_file:
         private_key = serialization.load_pem_private_key(
@@ -363,47 +385,102 @@ def sdjwtFormatter(PID, country):
     (private_key_curve_identifier, private_key_x, private_key_y) = KeyData(
         private_key, "private"
     )
+    print("TUTAJ PROBLEM ZACZYNA SIE")
 
-    device_key_bytes = base64.urlsafe_b64decode(device_key.encode("utf-8"))
-    public_key = serialization.load_pem_public_key(device_key_bytes)
+    print("device key: ", device_key)
 
-    (public_key_curve_identifier, public_key_x, public_key_y) = KeyData(
-        public_key, "public"
-    )
+    # device_key_bytes = base64.urlsafe_b64decode(device_key.encode("utf-8"))
+    print(1)
+    # public_key = serialization.load_pem_public_key(device_key_bytes)
+    print(2)
+    # (public_key_curve_identifier, public_key_x, public_key_y) = KeyData(
+    #     public_key, "public"
+    # )
+    print(3)
+
+    with open(
+        cfgcountries.supported_countries[country]["pid_sd_jwt_privkey_pqc"], "rb"
+    ) as key_file:
+        seed_pem = key_file.read()
+
+    print(3.1)
+
+    pem_str = seed_pem.decode("utf-8")
+    print(3.2)
+    base64_seed = re.findall(r"-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----", pem_str, re.DOTALL)
+    print(3.3)
+    if base64_seed:
+        clean_base64_seed = base64_seed[0].strip().replace('\n', '')
+    print(3.4)
+    decode_seed = base64.b64decode(clean_base64_seed)
+    print(3.5)
+    seed = decode_seed[22:]
+    print(3.6)
+    pk, sk = ML_DSA_44.key_derive(seed)
+
+    print(3.7)
 
     jwk_kwargs = {
+        # "issuer_key": {
+        #     "kty": "EC",
+        #     "d": jwt.utils.base64url_encode(
+        #         priv_d.to_bytes((priv_d.bit_length() + 7) // 8, "big")
+        #     ).decode("utf-8"),
+        #     "crv": private_key_curve_identifier,
+        #     "x": jwt.utils.base64url_encode(private_key_x).decode("utf-8"),
+        #     "y": jwt.utils.base64url_encode(private_key_y).decode("utf-8"),
+        # },
+        # "holder_key": {
+        #     "kty": "EC",
+        #     "crv": public_key_curve_identifier,
+        #     "x": jwt.utils.base64url_encode(public_key_x).decode("utf-8"),
+        #     "y": jwt.utils.base64url_encode(public_key_y).decode("utf-8"),
+        # },
         "issuer_key": {
-            "kty": "EC",
-            "d": jwt.utils.base64url_encode(
-                priv_d.to_bytes((priv_d.bit_length() + 7) // 8, "big")
-            ).decode("utf-8"),
-            "crv": private_key_curve_identifier,
-            "x": jwt.utils.base64url_encode(private_key_x).decode("utf-8"),
-            "y": jwt.utils.base64url_encode(private_key_y).decode("utf-8"),
-        },
+                "kid": "T4xl70S7MT6Zeq6r9V9fPJGVn76wfnXJ21-gyo0Gu6o",
+                "kty": "AKP",
+                "alg": "ML-DSA-44",
+                "pub": base64.b64encode(pk).decode("utf-8"),
+                "seed": base64.b64encode(seed).decode("utf-8"),
+            },
         "holder_key": {
-            "kty": "EC",
-            "crv": public_key_curve_identifier,
-            "x": jwt.utils.base64url_encode(public_key_x).decode("utf-8"),
-            "y": jwt.utils.base64url_encode(public_key_y).decode("utf-8"),
+            "kty": "AKP",
+            "alg": "Dilithium3",
+            "pub": device_key,
+            # "crv": public_key_curve_identifier,
+            # "x": jwt.utils.base64url_encode(public_key_x).decode("utf-8"),
+            # "y": jwt.utils.base64url_encode(public_key_y).decode("utf-8"),
         },
         "key_size": 256,
         "kty": "EC",
     }
 
+    print(4)
+
     keys = get_jwk(jwk_kwargs, True, seed)
+    print(5)
 
     ### Produce SD-JWT and SVC for selected example
     SDJWTIssuer.unsafe_randomness = False
+    print(6)
     SDJWTIssuer.SD_JWT_HEADER = "dc+sd-jwt"
+    print(7)
+    # sdjwt_at_issuer = SDJWTIssuer(
+    #     claims,
+    #     keys["issuer_key"],
+    #     keys["holder_key"],
+    #     add_decoy_claims=False,
+    #     extra_header_parameters=x5c,
+    # )
     sdjwt_at_issuer = SDJWTIssuer(
         claims,
         keys["issuer_key"],
         keys["holder_key"],
+        sign_alg="ML-DSA-44",
         add_decoy_claims=False,
-        extra_header_parameters=x5c,
+        extra_header_parameters=x5c_pqc
     )
-
+    print(8)
     # sdjwt_at_holder = SDJWTHolder(sdjwt_at_issuer.sd_jwt_issuance)
     # sdjwt_at_holder.create_presentation(
     # example["holder_disclosed_claims"],

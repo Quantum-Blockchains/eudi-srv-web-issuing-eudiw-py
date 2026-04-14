@@ -200,6 +200,7 @@ def auth_choice():
 
     pid_auth = True
     country_selection = True
+    lei_lookup = True
 
     authorization_details = []
 
@@ -245,32 +246,50 @@ def auth_choice():
     )
 
     for cred in credentials_requested:
-        if (
-            cred in supported_credencials["PID_login"]
-            and cred not in supported_credencials["country_selection"]
-        ):
-            country_selection = False
+        # if (
+        #     cred in supported_credencials["PID_login"]
+        #     and cred not in supported_credencials["country_selection"]
+        #     and cred not in supported_credencials["lei_lookup"]
+        # ):
+        #     country_selection = False
+        #     lei_lookup = False
 
-        elif (
-            cred not in supported_credencials["PID_login"]
-            and cred in supported_credencials["country_selection"]
-        ):
+        # elif (
+        #     cred not in supported_credencials["PID_login"]
+        #     and cred in supported_credencials["country_selection"]
+        #     and cred not in supported_credencials["lei_lookup"]
+        # ):
+        #     pid_auth = False
+        #     lei_lookup = False
+        # elif cred not in supported_credencials["lei_lookup"]:
+        #     lei_lookup = False
+        # elif (
+        #     cred not in supported_credencials["PID_login"]
+        #     and cred not in supported_credencials["country_selection"]
+        #     and cred not in supported_credencials["lei_lookup"]
+        # ):
+        #     country_selection = False
+        #     pid_auth = False
+        #     lei_lookup = False
+        if cred not in supported_credencials["PID_login"]:
+            print("HAHA 1")
             pid_auth = False
-
-        elif (
-            cred not in supported_credencials["PID_login"]
-            and cred not in supported_credencials["country_selection"]
-        ):
+        if cred not in supported_credencials["country_selection"]:
+            print("HAHA 2")
             country_selection = False
-            pid_auth = False
+        if cred not in supported_credencials["lei_lookup"]:
+            print("HAHA 3")
+            lei_lookup = False
 
     if country_selection == False and pid_auth == True:
         return redirect(cfgservice.service_url + "oid4vp")
     elif country_selection == True and pid_auth == False:
         return redirect(cfgservice.service_url + "dynamic/")
+    elif lei_lookup == True and pid_auth == False and country_selection == False:
+        return redirect(cfgservice.service_url + "dynamic/lei")
 
     error = ""
-    if pid_auth == False and country_selection == False:
+    if pid_auth == False and country_selection == False and lei_lookup == False:
         error = "Combination of requested credentials is not valid!"
 
     target_url = ConfFrontend.registered_frontends[frontend_id]["url"]
@@ -280,6 +299,7 @@ def auth_choice():
         data_payload={
             "pid_auth": pid_auth,
             "country_selection": country_selection,
+            "lei_lookup": lei_lookup,
             "redirect_url": cfgservice.service_url,
             "session_id": session_id,
         },
@@ -418,39 +438,55 @@ def pKfromJWT(jwt_encoded):
 
 
 def pKfromJWK(jwk):
-    if "crv" not in jwk or jwk["crv"] != "P-256":
-        _resp = {
-            "error": "invalid_proof",
-            "error_description": "Credential Issuer only supports P-256 curves",
-        }
-        return _resp  # {"response_args": _resp, "client_id": client_id}
+    if jwk["kty"] == "EC":
+        if "crv" not in jwk or jwk["crv"] != "P-256":
+            _resp = {
+                "error": "invalid_proof",
+                "error_description": "Credential Issuer only supports P-256 curves",
+            }
+            return _resp  # {"response_args": _resp, "client_id": client_id}
 
-    x = jwk["x"]
-    y = jwk["y"]
+        x = jwk["x"]
+        y = jwk["y"]
 
-    # Convert string coordinates to bytes
-    x_bytes = base64.urlsafe_b64decode(x + "=" * (4 - len(x) % 4))
-    y_bytes = base64.urlsafe_b64decode(y + "=" * (4 - len(y) % 4))
+        # Convert string coordinates to bytes
+        x_bytes = base64.urlsafe_b64decode(x + "=" * (4 - len(x) % 4))
+        y_bytes = base64.urlsafe_b64decode(y + "=" * (4 - len(y) % 4))
 
-    # Create a public key from the bytes
-    public_numbers = ec.EllipticCurvePublicNumbers(
-        x=int.from_bytes(x_bytes, "big"),
-        y=int.from_bytes(y_bytes, "big"),
-        curve=ec.SECP256R1(),
-    )
+        # Create a public key from the bytes
+        public_numbers = ec.EllipticCurvePublicNumbers(
+            x=int.from_bytes(x_bytes, "big"),
+            y=int.from_bytes(y_bytes, "big"),
+            curve=ec.SECP256R1(),
+        )
 
-    public_key = public_numbers.public_key()
+        public_key = public_numbers.public_key()
 
-    # Serialize the public key to PEM format
-    public_key_pem = public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
+        # Serialize the public key to PEM format
+        public_key_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
 
-    # Encode the public key in base64url format
+        # Encode the public key in base64url format
 
-    device_key = base64.urlsafe_b64encode(public_key_pem).decode("utf-8")
-
+        device_key = base64.urlsafe_b64encode(public_key_pem).decode("utf-8")
+    elif jwk["kty"] == "AKP":
+        print("pKfromJWK 1")
+        if "alg" not in jwk or jwk["alg"] != "Dilithium3":
+            print("pKfromJWK 2")
+            _resp = {
+                "error": "invalid_proof",
+                "error_description": "Credential Issuer only supports ES256, Dilithium2, Dilithium3, Dilithium5 and ML-DSA-44 algorithm ",
+            }
+            print("pKfromJWK 3")
+            return _resp
+        print("pKfromJWK 4")
+        pub = jwk["pub"]
+        print("pKfromJWK 5")
+        # device_key = base64.urlsafe_b64encode(pub).decode("utf-8")
+        device_key = pub
+    
     return device_key
 
 
@@ -531,7 +567,25 @@ def generate_credentials(credential_request, session_id):
 
     json_data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
-    _msg = requests.post(redirect_uri, data=json_data, headers=headers).json()
+    response = requests.post(redirect_uri, data=json_data, headers=headers)
+
+    try:
+        _msg = response.json()
+    except ValueError:
+        cfgservice.app_logger.error(
+            "Dynamic formatter returned non-JSON response. "
+            f"status={response.status_code}, body={response.text[:500]}"
+        )
+        return {
+            "error": "issuer_backend_error",
+            "error_description": "Dynamic formatter returned a non-JSON response.",
+        }
+
+    if response.status_code >= 400:
+        cfgservice.app_logger.error(
+            "Dynamic formatter returned error response. "
+            f"status={response.status_code}, payload={_msg}"
+        )
 
     return _msg
 

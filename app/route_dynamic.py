@@ -25,9 +25,13 @@ This route_dynamic.py file is the blueprint for the route /dynamic of the PID Is
 from datetime import datetime, timezone
 from datetime import date
 from datetime import timedelta
+from difflib import SequenceMatcher
+from email.message import EmailMessage
 import json
 import base64
+import random
 import re
+import smtplib
 from urllib.parse import urlencode
 from uuid import uuid4
 from flask import (
@@ -56,6 +60,9 @@ from misc import (
     getAttributesForm2,
     calculate_age,
     vct2doctype,
+    generate_unique_id,
+    vct2id,
+    scope2details,
 )
 from dynamic_func import dynamic_formatter
 from app import oidc_metadata
@@ -65,11 +72,506 @@ from app import session_manager
 dynamic = Blueprint("dynamic", __name__, url_prefix="/dynamic")
 CORS(dynamic)  # enable CORS on the blue print
 
-# secrets
 
-# app.config["SECRET_KEY"] = flask_secret_key
-# app.config["dynamic"] = {}
+def _get_target_frontend_url(frontend_id):
+    return ConfFrontend.registered_frontends[frontend_id]["url"]
 
+
+def _resolve_display_name(credential):
+    if "credential_metadata" in credential:
+        return credential["credential_metadata"]["display"][0]["name"]
+    return credential["display"][0]["name"]
+
+
+def _resolve_claims(credential):
+    if "credential_metadata" in credential:
+        return credential["credential_metadata"]["claims"]
+    return credential["claims"]
+
+
+def _get_auth_method_flags(credentials_requested):
+    supported_credentials = cfgserv.auth_method_supported_credencials
+
+    pid_auth = all(
+        credential in supported_credentials["PID_login"]
+        for credential in credentials_requested
+    )
+    country_selection = all(
+        credential in supported_credentials["country_selection"]
+        for credential in credentials_requested
+    )
+    lei_lookup = all(
+        credential in supported_credentials["lei_lookup"]
+        for credential in credentials_requested
+    )
+
+    return pid_auth, country_selection, lei_lookup
+
+
+def _render_auth_method_selection(current_session, error=""):
+    pid_auth, country_selection, lei_lookup = _get_auth_method_flags(
+        current_session.credentials_requested
+    )
+
+    return post_redirect_with_payload(
+        target_url=f"{_get_target_frontend_url(current_session.frontend_id)}/display_auth_method",
+        data_payload={
+            "pid_auth": pid_auth,
+            "country_selection": country_selection,
+            "lei_lookup": lei_lookup,
+            "redirect_url": cfgserv.service_url,
+            "session_id": current_session.session_id,
+            "error": error,
+        },
+    )
+
+
+def _render_lei_form(current_session, error="", lei=""):
+    return post_redirect_with_payload(
+        target_url=f"{_get_target_frontend_url(current_session.frontend_id)}/display_lei",
+        data_payload={
+            "redirect_url": f"{cfgserv.service_url}dynamic/lei",
+            "error": error,
+            "lei": lei,
+            "session_id": current_session.session_id,
+        },
+    )
+
+
+PUBLIC_EMAIL_DOMAINS = {
+    "gmail.com",
+    "googlemail.com",
+    "hotmail.com",
+    "outlook.com",
+    "live.com",
+    "msn.com",
+    "yahoo.com",
+    "icloud.com",
+    "me.com",
+    "aol.com",
+    "proton.me",
+    "protonmail.com",
+    "gmx.com",
+    "mail.com",
+    "yandex.com",
+    "zoho.com",
+}
+
+
+def _normalize_company_text(value):
+    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
+
+
+def _extract_domain_root(domain):
+    parts = [part for part in (domain or "").lower().split(".") if part]
+    if not parts:
+        return ""
+
+    if len(parts) >= 3 and len(parts[-1]) == 2 and parts[-2] in {
+        "ac",
+        "co",
+        "com",
+        "gov",
+        "net",
+        "org",
+    }:
+        return parts[-3]
+
+    if len(parts) >= 2:
+        return parts[-2]
+
+    return parts[0]
+
+
+def _company_tokens(company_name):
+    ignored_tokens = {
+        "and",
+        "company",
+        "corp",
+        "corporation",
+        "gmbh",
+        "group",
+        "holding",
+        "inc",
+        "limited",
+        "llc",
+        "ltd",
+        "plc",
+        "sa",
+        "sas",
+        "spa",
+        "the",
+    }
+    return [
+        token
+        for token in re.findall(r"[a-z0-9]+", (company_name or "").lower())
+        if len(token) >= 3 and token not in ignored_tokens
+    ]
+
+
+def _email_domain_matches_company(company_name, email_domain):
+    domain_root = _extract_domain_root(email_domain)
+    domain_norm = _normalize_company_text(domain_root)
+    company_norm = _normalize_company_text(company_name)
+
+    if not domain_norm or not company_norm:
+        return False
+
+    if email_domain.lower() in PUBLIC_EMAIL_DOMAINS:
+        return False
+
+    if domain_norm in company_norm or company_norm in domain_norm:
+        return True
+
+    company_tokens = _company_tokens(company_name)
+    if any(token in domain_norm or domain_norm in token for token in company_tokens):
+        return True
+
+    comparison_candidates = [company_norm] + company_tokens
+    return any(
+        SequenceMatcher(None, domain_norm, candidate).ratio() >= 0.75
+        for candidate in comparison_candidates
+        if candidate
+    )
+
+
+def _validate_employee_email(employee_email, company_name):
+    normalized_email = (employee_email or "").strip().lower()
+
+    if not normalized_email:
+        return "Employee email is required."
+
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized_email):
+        return "Enter a valid employee email address."
+
+    email_domain = normalized_email.split("@", 1)[1]
+    if email_domain in PUBLIC_EMAIL_DOMAINS:
+        return "Use your company email address, not a public mailbox."
+
+    if not _email_domain_matches_company(company_name=company_name, email_domain=email_domain):
+        return "Email domain must match the company name from the LEI record."
+
+    return ""
+
+
+def _build_authorization_payload(
+    current_session,
+    presentation_data,
+    error="",
+    employee_email="",
+    authorization_requires_email=False,
+    otp_sent=False,
+    otp_code="",
+    info_message="",
+):
+    company_name = ""
+    if current_session.user_data:
+        company_name = current_session.user_data.get("legal_name", "")
+
+    return {
+        "presentation_data": presentation_data,
+        "redirect_url": f"{cfgserv.service_url}dynamic/redirect_wallet",
+        "session_id": current_session.session_id,
+        "error": error,
+        "work_email": employee_email,
+        "authorization_requires_email": authorization_requires_email,
+        "company_name": company_name,
+        "otp_sent": otp_sent,
+        "otp_code": otp_code,
+        "info_message": info_message,
+    }
+
+
+def _send_otp_email(recipient_email, otp_code, company_name):
+    if not (
+        cfgserv.otp_email_host
+        and cfgserv.otp_email_from_address
+        and cfgserv.otp_email_username
+        and cfgserv.otp_email_password
+    ):
+        cfgserv.app_logger.warning(
+            "OTP email delivery is not configured. Generated OTP for %s (%s): %s",
+            recipient_email,
+            company_name,
+            otp_code,
+        )
+        return (
+            False,
+            "OTP email delivery is not configured on the server.",
+        )
+
+    message = EmailMessage()
+    message["Subject"] = "Your verification code"
+    message["From"] = cfgserv.otp_email_from
+    message["To"] = recipient_email
+    message.set_content(
+        "\n".join(
+            [
+                "Your one-time verification code is:",
+                "",
+                str(otp_code),
+                "",
+                f"Company: {company_name}" if company_name else "",
+                "If you did not request this code, ignore this email.",
+            ]
+        ).strip()
+    )
+
+    try:
+        with smtplib.SMTP(cfgserv.otp_email_host, cfgserv.otp_email_port, timeout=20) as smtp:
+            if cfgserv.otp_email_use_tls:
+                smtp.starttls()
+            smtp.login(cfgserv.otp_email_username, cfgserv.otp_email_password)
+            smtp.send_message(message)
+    except Exception as exc:
+        cfgserv.app_logger.error(
+            "Failed to send OTP email to %s: %s",
+            recipient_email,
+            str(exc),
+        )
+        return False, "Failed to send the OTP email. Try again."
+
+    cfgserv.app_logger.info("OTP email sent to %s", recipient_email)
+    return True, ""
+
+
+def _render_lei_authorization(
+    current_session,
+    error="",
+    employee_email="",
+    otp_sent=False,
+    otp_code="",
+    info_message="",
+):
+    presentation_data = _build_presentation_data(cleaned_data=current_session.user_data or {})
+    return post_redirect_with_payload(
+        target_url=f"{_get_target_frontend_url(current_session.frontend_id)}/display_authorization",
+        data_payload=_build_authorization_payload(
+            current_session=current_session,
+            presentation_data=presentation_data,
+            error=error,
+            employee_email=employee_email,
+            authorization_requires_email=True,
+            otp_sent=otp_sent,
+            otp_code=otp_code,
+            info_message=info_message,
+        ),
+    )
+
+
+def _requested_credentials_from_session():
+    authorization_params = session.get("authorization_params", {})
+    authorization_details = []
+
+    if "authorization_details" in authorization_params:
+        authorization_details.extend(
+            json.loads(authorization_params["authorization_details"])
+        )
+    if "scope" in authorization_params:
+        authorization_details.extend(scope2details(authorization_params["scope"]))
+
+    credentials_requested = []
+    for cred in authorization_details:
+        if "credential_configuration_id" in cred:
+            cred_id = cred["credential_configuration_id"]
+        elif "vct" in cred:
+            cred_id = vct2id(cred["vct"])
+        else:
+            continue
+
+        if cred_id not in credentials_requested:
+            credentials_requested.append(cred_id)
+
+    return credentials_requested
+
+
+def _fetch_lei_data(lei):
+    url = f"{cfgserv.lei_api_base_url}/{lei}.jsonld"
+    
+    cfgserv.app_logger.info(f"LEI lookup: Fetching from {url}")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (EUDI-Issuer/1.0; +https://github.com/eu-digital-identity-wallet)",
+        "Accept": "application/ld+json, application/json",
+    }
+
+    cfgserv.app_logger.debug(f"LEI lookup: Request headers: {headers}")
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        cfgserv.app_logger.debug(f"LEI lookup: Response status={response.status_code}, headers={dict(response.headers)}")
+    except requests.RequestException as e:
+        cfgserv.app_logger.error(f"LEI lookup: Network error for {lei}: {str(e)}")
+        return None, "LEI lookup failed"
+
+    if response.status_code != 200:
+        cfgserv.app_logger.warning(f"LEI lookup: HTTP {response.status_code} for {lei}, response body (first 200 chars): {response.text[:200]}")
+        return None, "LEI record was not found (lei.info)"
+
+    try:
+        json_data = response.json()
+    except (ValueError, TypeError) as e:
+        cfgserv.app_logger.error(f"LEI lookup: JSON parse error for {lei}: {str(e)}")
+        return None, "LEI response could not be parsed"
+
+    record = None
+    if isinstance(json_data, dict) and "data" in json_data:
+        record = json_data.get("data", {}).get("attributes", {}).get("entity")
+    elif isinstance(json_data, list):
+        record = next(
+            (
+                item
+                for item in json_data
+                if isinstance(item, dict)
+                and "LegalEntity" in str(item.get("@type", ""))
+            ),
+            None,
+        )
+
+    if not isinstance(record, dict):
+        cfgserv.app_logger.error(f"LEI lookup: No LegalEntity record found in response for {lei}")
+        return None, "LEI record could not be parsed (lei.info jsonld)"
+
+    cfgserv.app_logger.debug(f"LEI lookup: Parsed LegalEntity record for {lei}")
+
+    # Handle lei.info JSON-LD property names first, then GLEIF names as fallback
+    legal_address = record.get("l1:legalAddress", record.get("legalAddress", {}))
+    legal_address_parts = [
+        record.get("l1:streetAddress", legal_address.get("streetAddress")),
+        record.get("l1:city", legal_address.get("city")),
+        record.get("l1:region", legal_address.get("region")),
+        record.get("l1:postalCode", legal_address.get("postalCode")),
+        record.get("l1:country", legal_address.get("country")),
+    ]
+    legal_address_value = ", ".join([part for part in legal_address_parts if part])
+
+    raw_jurisdiction = record.get("l1:legalJurisdiction", record.get("legalJurisdiction", ""))
+    if isinstance(raw_jurisdiction, dict):
+        legal_jurisdiction = (
+            raw_jurisdiction.get("id")
+            or raw_jurisdiction.get("value")
+            or raw_jurisdiction.get("code")
+            or ""
+        )
+    elif isinstance(raw_jurisdiction, list) and raw_jurisdiction:
+        legal_jurisdiction = raw_jurisdiction[0]
+    else:
+        legal_jurisdiction = raw_jurisdiction
+
+    legal_name_raw = record.get("l1:legalName", record.get("legalName", ""))
+    if isinstance(legal_name_raw, dict):
+        legal_name = legal_name_raw.get("name", legal_name_raw.get("@value", ""))
+    else:
+        legal_name = legal_name_raw if legal_name_raw else ""
+
+    legal_form_raw = record.get("l1:entityLegalFormCode", "") or record.get("legalForm", "")
+    if isinstance(legal_form_raw, dict):
+        legal_form = legal_form_raw.get("id", "")
+    else:
+        legal_form = legal_form_raw
+
+    status_raw = record.get("l1:legalEntityStatus", record.get("status", ""))
+    if isinstance(status_raw, dict):
+        registration_status = status_raw.get("@id", status_raw.get("id", ""))
+    else:
+        registration_status = status_raw
+
+    data = {
+        "lei": lei,
+        "legal_name": legal_name,
+        "legal_jurisdiction": legal_jurisdiction,
+        "legal_form": legal_form,
+        "registration_status": registration_status,
+        "legal_address": legal_address_value,
+        "version": "1.0",  # Hardcoded version
+        "issuing_country": "LEI",
+        "issuing_authority": "LEI Lookup Demo Issuer",
+    }
+
+    cfgserv.app_logger.info(
+        f"LEI lookup: Success for {lei} - name={legal_name}, "
+        f"jurisdiction={legal_jurisdiction}, source=lei.info"
+    )
+
+    return data, None
+
+
+def _build_presentation_data(cleaned_data):
+    credentials_supported = oidc_metadata["credential_configurations_supported"]
+    presentation_data = {}
+    current_session = session_manager.get_session(session_id=session["session_id"])
+
+    for credential_requested in current_session.credentials_requested:
+        credential = credentials_supported[credential_requested]
+        credential_name = _resolve_display_name(credential)
+        presentation_data.update({credential_name: {}})
+
+        for claim in _resolve_claims(credential):
+            claim_key = claim["path"][-1]
+            if claim_key in cleaned_data:
+                presentation_data[credential_name][claim_key] = cleaned_data[claim_key]
+
+        doctype_config = credential["issuer_config"]
+        today = date.today()
+        expiry = today + timedelta(days=doctype_config["validity"])
+
+        presentation_data[credential_name].update(
+            {
+                "estimated_issuance_date": today.strftime("%Y-%m-%d"),
+                "estimated_expiry_date": expiry.strftime("%Y-%m-%d"),
+                "issuing_country": cleaned_data["issuing_country"],
+                "issuing_authority": doctype_config["issuing_authority"],
+            }
+        )
+
+        if "credential_type" in doctype_config:
+            presentation_data[credential_name].update(
+                {"credential_type": doctype_config["credential_type"]}
+            )
+
+    return presentation_data
+
+
+@dynamic.route("/lei", methods=["GET", "POST"])
+def lei_form():
+    session_id = session["session_id"]
+    current_session = session_manager.get_session(session_id=session_id)
+    session_manager.update_country(session_id=session_id, country="LEI")
+
+    if request.method == "GET":
+        return _render_lei_form(current_session=current_session)
+
+    if "Cancelled" in request.form.keys():
+        return _render_auth_method_selection(current_session=current_session)
+
+    lei = request.form.get("lei", "").strip().upper()
+
+    if len(lei) != 20 or not lei.isalnum():
+        return _render_lei_form(
+            current_session=current_session,
+            error="LEI must contain 20 letters or digits.",
+            lei=lei,
+        )
+
+    cleaned_data, error = _fetch_lei_data(lei)
+    if error:
+        return _render_lei_form(
+            current_session=current_session,
+            error=error,
+            lei=lei,
+        )
+
+    session_manager.update_user_data(session_id=session_id, user_data=cleaned_data)
+    presentation_data = _build_presentation_data(cleaned_data=cleaned_data)
+
+    return post_redirect_with_payload(
+        target_url=f"{_get_target_frontend_url(current_session.frontend_id)}/display_authorization",
+        data_payload=_build_authorization_payload(
+            current_session=current_session,
+            presentation_data=presentation_data,
+            authorization_requires_email=True,
+        ),
+    )
 
 @dynamic.route("/", methods=["GET", "POST"])
 def Supported_Countries():
@@ -519,6 +1021,16 @@ def dynamic_R2_data_collect(country, session_id, access_token):
 
         return data
 
+    if country == "LEI":
+        current_session = session_manager.get_session(session_id=session_id)
+
+        data = current_session.user_data
+
+        if data == "Data not found":
+            return {"error": "error", "error_description": "Data not found"}
+
+        return data
+
     elif cfgcountries.supported_countries[country]["connection_type"] == "oauth":
 
         """attribute_request = cfgcountries.supported_countries[country][
@@ -625,9 +1137,11 @@ def dynamic_R2_data_collect(country, session_id, access_token):
         ]
 
         metadata_url = (
-            cfgcountries.supported_countries[session["country"]]["oidc_auth"][
-                "base_url"
-            ]
+            # cfgcountries.supported_countries[session["country"]]["oidc_auth"][
+            #     "base_url"
+            # ]
+            # + "/.well-known/openid-configuration"
+            cfgcountries.supported_countries[country]["oidc_auth"]["base_url"]
             + "/.well-known/openid-configuration"
         )
         metadata_json = requests.get(metadata_url).json()
@@ -672,6 +1186,8 @@ def dynamic_R2_data_collect(country, session_id, access_token):
             if country in birth_places:
                 data["birth_place"] = birth_places[country]
                 data["place_of_birth"] = [{"locality": birth_places[country]}]
+
+            session_manager.update_user_data(session_id=session_id, user_data=data)
 
             return data
         except:
@@ -759,6 +1275,9 @@ def credentialCreation(credential_request, data, country, session_id):
             form_data = data
 
         elif country == "sample":
+            form_data = data
+
+        elif country == "LEI":
             form_data = data
 
         elif (
@@ -874,6 +1393,8 @@ def auth():
         return redirect(cfgserv.service_url + "oid4vp")
     elif choice == "link2":
         return redirect(cfgserv.service_url + "dynamic/")
+    elif choice == "link3":
+        return redirect(cfgserv.service_url + "dynamic/lei")
 
 
 def form_formatter(form_data: dict) -> dict:
@@ -1235,6 +1756,79 @@ def redirect_wallet():
     session_id = session["session_id"]
 
     current_session = session_manager.get_session(session_id=session_id)
+
+    if current_session.country == "LEI":
+        employee_email = request.form.get("employee_email", "").strip().lower()
+        otp_code = request.form.get("otp_code", "").strip()
+        company_name = ""
+        if current_session.user_data:
+            company_name = current_session.user_data.get("legal_name", "")
+
+        email_error = _validate_employee_email(
+            employee_email=employee_email,
+            company_name=company_name,
+        )
+        if email_error:
+            return _render_lei_authorization(
+                current_session=current_session,
+                error=email_error,
+                employee_email=employee_email,
+                otp_sent=bool(current_session.tx_code),
+                otp_code=otp_code,
+            )
+
+        updated_user_data = dict(current_session.user_data or {})
+        updated_user_data["employee_email"] = employee_email
+        session_manager.update_user_data(
+            session_id=session_id,
+            user_data=updated_user_data,
+        )
+
+        if "send" in request.form or "resend" in request.form:
+            generated_otp = random.randint(100000, 999999)
+            session_manager.update_tx_code(session_id=session_id, tx_code=generated_otp)
+
+            sent, send_error = _send_otp_email(
+                recipient_email=employee_email,
+                otp_code=generated_otp,
+                company_name=company_name,
+            )
+            return _render_lei_authorization(
+                current_session=session_manager.get_session(session_id=session_id),
+                error=send_error,
+                employee_email=employee_email,
+                otp_sent=sent,
+                info_message=(
+                    "Verification code sent to your email."
+                    if sent
+                    else ""
+                ),
+            )
+
+        if not current_session.tx_code:
+            return _render_lei_authorization(
+                current_session=current_session,
+                error="Send the verification code first.",
+                employee_email=employee_email,
+                otp_code=otp_code,
+            )
+
+        if not otp_code:
+            return _render_lei_authorization(
+                current_session=current_session,
+                error="Enter the verification code to continue.",
+                employee_email=employee_email,
+                otp_sent=True,
+            )
+
+        if otp_code != str(current_session.tx_code):
+            return _render_lei_authorization(
+                current_session=current_session,
+                error="Verification code is incorrect.",
+                employee_email=employee_email,
+                otp_sent=True,
+                otp_code=otp_code,
+            )
 
     return redirect(
         url_get(

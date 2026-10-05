@@ -445,7 +445,7 @@ def sdjwtFormatter(PID, country):
             },
         "holder_key": {
             "kty": "AKP",
-            "alg": "Dilithium3",
+            "alg": "ML-DSA-44",
             "pub": device_key,
             # "crv": public_key_curve_identifier,
             # "x": jwt.utils.base64url_encode(public_key_x).decode("utf-8"),

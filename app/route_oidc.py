@@ -473,7 +473,7 @@ def pKfromJWK(jwk):
         device_key = base64.urlsafe_b64encode(public_key_pem).decode("utf-8")
     elif jwk["kty"] == "AKP":
         print("pKfromJWK 1")
-        if "alg" not in jwk or jwk["alg"] != "Dilithium3":
+        if "alg" not in jwk and (jwk["alg"] != "Dilithium3" or jwk["alg"] != "ML-DSA-44"):
             print("pKfromJWK 2")
             _resp = {
                 "error": "invalid_proof",
